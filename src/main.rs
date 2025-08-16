@@ -265,100 +265,104 @@ async fn run(event_loop: EventLoop<()>, window: winit::window::Window) {
     });
 
     // Main event loop
-    event_loop.run(|event, _control_flow| {
-        match event {
-            Event::AboutToWait => {
-                // 1. Dispatch compute shader
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Compute Encoder"),
-                });
+    event_loop
+        .run(|event, _control_flow| {
+            match event {
+                Event::AboutToWait => {
+                    // 1. Dispatch compute shader
+                    let mut encoder =
+                        device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Compute Encoder"),
+                        });
 
-                {
-                    let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                        timestamp_writes: None,
-                        label: Some("Compute Pass"),
-                    });
-                    cpass.set_pipeline(&compute_pipeline);
-                    cpass.set_bind_group(0, &bind_group, &[]);
-                    cpass.dispatch_workgroups(WIDTH / 8, HEIGHT / 8, 1);
+                    {
+                        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                            timestamp_writes: None,
+                            label: Some("Compute Pass"),
+                        });
+                        cpass.set_pipeline(&compute_pipeline);
+                        cpass.set_bind_group(0, &bind_group, &[]);
+                        cpass.dispatch_workgroups(WIDTH / 8, HEIGHT / 8, 1);
+                    }
+
+                    queue.submit(Some(encoder.finish()));
+
+                    // 2. Render to window
+                    let frame = match surface.get_current_texture() {
+                        Ok(frame) => frame,
+                        Err(_) => {
+                            surface.configure(
+                                &device,
+                                &wgpu::SurfaceConfiguration {
+                                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                                    format: surface_format,
+                                    width: WIDTH,
+                                    height: HEIGHT,
+                                    present_mode: wgpu::PresentMode::Fifo,
+                                    alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+                                    view_formats: vec![],
+                                    desired_maximum_frame_latency: 2,
+                                },
+                            );
+                            surface
+                                .get_current_texture()
+                                .expect("Failed to acquire next swap chain texture")
+                        }
+                    };
+                    let view = frame
+                        .texture
+                        .create_view(&wgpu::TextureViewDescriptor::default());
+
+                    let mut render_encoder =
+                        device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Render Encoder"),
+                        });
+                    {
+                        let mut rpass =
+                            render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                label: Some("Render Pass"),
+                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                    view: &view,
+                                    resolve_target: None,
+                                    ops: wgpu::Operations {
+                                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                                        store: wgpu::StoreOp::Store,
+                                    },
+                                })],
+                                depth_stencil_attachment: None,
+                                ..Default::default()
+                            });
+                        rpass.set_pipeline(&render_pipeline);
+                        rpass.set_bind_group(0, &render_bind_group, &[]);
+                        rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                        rpass.draw(0..4, 0..1);
+                    }
+
+                    queue.submit(Some(render_encoder.finish()));
+                    frame.present();
                 }
-
-                queue.submit(Some(encoder.finish()));
-
-                // 2. Render to window
-                let frame = match surface.get_current_texture() {
-                    Ok(frame) => frame,
-                    Err(_) => {
+                Event::WindowEvent { event, .. } => match event {
+                    WindowEvent::CloseRequested => process::exit(0),
+                    WindowEvent::Resized(size) => {
                         surface.configure(
                             &device,
                             &wgpu::SurfaceConfiguration {
                                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                                 format: surface_format,
-                                width: WIDTH,
-                                height: HEIGHT,
+                                width: size.width,
+                                height: size.height,
                                 present_mode: wgpu::PresentMode::Fifo,
                                 alpha_mode: wgpu::CompositeAlphaMode::Opaque,
                                 view_formats: vec![],
                                 desired_maximum_frame_latency: 2,
                             },
                         );
-                        surface
-                            .get_current_texture()
-                            .expect("Failed to acquire next swap chain texture")
+                        window.request_redraw();
                     }
-                };
-                let view = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-
-                let mut render_encoder =
-                    device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("Render Encoder"),
-                    });
-                {
-                    let mut rpass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("Render Pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &view,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        ..Default::default()
-                    });
-                    rpass.set_pipeline(&render_pipeline);
-                    rpass.set_bind_group(0, &render_bind_group, &[]);
-                    rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                    rpass.draw(0..4, 0..1);
-                }
-
-                queue.submit(Some(render_encoder.finish()));
-                frame.present();
-            }
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => process::exit(0),
-                WindowEvent::Resized(size) => {
-                    surface.configure(
-                        &device,
-                        &wgpu::SurfaceConfiguration {
-                            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                            format: surface_format,
-                            width: size.width,
-                            height: size.height,
-                            present_mode: wgpu::PresentMode::Fifo,
-                            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
-                            view_formats: vec![],
-                            desired_maximum_frame_latency: 2,
-                        },
-                    );
-                    window.request_redraw();
-                }
+                    _ => {}
+                },
                 _ => {}
-            },
-            _ => {}
-        }
-    });
+            }
+        })
+        .expect("run eventloop");
 }
