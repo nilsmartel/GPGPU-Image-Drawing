@@ -6,6 +6,8 @@ A minimal example that:
 - Uses a wgpu compute shader to write into a storage texture every frame
 - Renders that texture to the screen with a fullscreen triangle
 
+![screenshot of window showing gpu shader output](./screenshot.png)
+
 ## Run
 
 ```bash
