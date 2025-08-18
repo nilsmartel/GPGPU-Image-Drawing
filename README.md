@@ -21,3 +21,4 @@ If you are on Linux and see adaptor/surface issues, ensure you have Vulkan drive
 - The compute shader writes to an `rgba8unorm` storage texture.
 - The render pass samples that texture and draws it to the swapchain surface.
 - On resize, the storage texture and bind groups are recreated to match the new size.
+- Actual Compute Code can be found in the wgsl files under `src/shader`
